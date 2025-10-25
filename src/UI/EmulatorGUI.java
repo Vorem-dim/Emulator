@@ -13,13 +13,10 @@ public class EmulatorGUI {
     private static final String COMMAND_FORMAT = "%08X";
     private static final String NUMBER_FORMAT = "%04X";
 
-    private JTextField dataBus;
-    private JTextField commandBus;
     private JTextArea statusArea;
-    private JTable registersTable;
-    private JTable dataMemoryTable;
-    private JTable commandMemoryTable;
     private JCheckBox zeroFlag, signFlag, carryFlag;
+    private JTable registersTable, dataMemoryTable, commandMemoryTable;
+    private JTextField dataBus, commandBus, executeStage, currentStage, tact;
 
     private final EmulatorViewModel emulator = new EmulatorViewModel();
 
@@ -128,6 +125,16 @@ public class EmulatorGUI {
         commandBus = new JTextField(String.format(COMMAND_FORMAT, 0), 10);
         commandBus.setEditable(false);
 
+        executeStage = new JTextField(10);
+        executeStage.setEditable(false);
+
+        currentStage = new JTextField(10);
+        currentStage.setEditable(false);
+
+        tact = new JTextField(10);
+        tact.setText(String.valueOf(EmulatorCPU.TACT));
+        tact.setEditable(false);
+
         JPanel flagsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
         flagsPanel.add(new JLabel("Флаги:"));
@@ -135,28 +142,43 @@ public class EmulatorGUI {
         flagsPanel.add(signFlag);
         flagsPanel.add(carryFlag);
 
-        JPanel commandBusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel countTacts = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        countTacts.add(new JLabel("Количество тактов:"));
+        countTacts.add(tact);
 
+        JPanel emulatorExecuteStage = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        emulatorExecuteStage.add(new JLabel("Выполненный этап:"));
+        emulatorExecuteStage.add(executeStage);
+
+        JPanel emulatorCurrentStage = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        emulatorCurrentStage.add(new JLabel("Следующий этап:"));
+        emulatorCurrentStage.add(currentStage);
+
+        JPanel emulatorStages = new JPanel(new GridLayout(2, 1));
+        emulatorStages.add(emulatorCurrentStage);
+        emulatorStages.add(emulatorExecuteStage);
+
+        JPanel commandBusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         commandBusPanel.add(new JLabel("Шина команд:"));
         commandBusPanel.add(commandBus);
 
         JPanel dataBusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-
         dataBusPanel.add(new JLabel("Шина данных:"));
         dataBusPanel.add(dataBus);
 
         JPanel busPanel = new JPanel(new GridLayout(2, 1));
-
         busPanel.setBorder(BorderFactory.createTitledBorder("Системные шины"));
         busPanel.add(commandBusPanel);
         busPanel.add(dataBusPanel);
 
         JScrollPane statusScroll = new JScrollPane(statusArea);
 
-        JPanel panel = new JPanel(new GridLayout(3, 1));
+        JPanel panel = new JPanel(new GridLayout(5, 1, 0, 0));
 
         panel.setBorder(BorderFactory.createTitledBorder("Состояние процессора"));
         panel.add(flagsPanel);
+        panel.add(countTacts);
+        panel.add(emulatorStages);
         panel.add(busPanel);
         panel.add(statusScroll);
 
@@ -227,6 +249,11 @@ public class EmulatorGUI {
 
         dataBus.setText(String.format(NUMBER_FORMAT, 0));
         commandBus.setText(String.format(COMMAND_FORMAT, 0));
+
+        executeStage.setText("");
+        currentStage.setText("");
+
+        tact.setText(String.valueOf(EmulatorCPU.TACT));
     }
 
     private void updateDisplay(HashMap<String, String> params) {
@@ -284,6 +311,12 @@ public class EmulatorGUI {
         zeroFlag.setSelected(EmulatorCPU.ZERO_FLAG);
         signFlag.setSelected(EmulatorCPU.SIGN_FLAG);
         carryFlag.setSelected(EmulatorCPU.CARRY_FLAG);
+
+        if (EmulatorCPU.PREVIOUS_STAGE != EmulatorCPU.CURRENT_STAGE)
+            executeStage.setText(EmulatorCPU.PREVIOUS_STAGE.toString());
+        currentStage.setText(EmulatorCPU.CURRENT_STAGE.toString());
+
+        tact.setText(String.valueOf(EmulatorCPU.TACT));
     }
 
     private void updateMemoryTable(JTable table, String[] memory, boolean isCommandMemory) {

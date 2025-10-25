@@ -8,6 +8,7 @@ import java.util.Objects;
 import static Model.InstructionStages.*;
 
 public class EmulatorCPU {
+    public static int TACT = 0;
     public static boolean IS_HALT = true;
     public static final int MEMORY_SIZE = 256;
     public static InstructionStages CURRENT_STAGE = FETCH;
@@ -97,6 +98,8 @@ public class EmulatorCPU {
 
             if (Objects.equals(executionStatus.get("State"), "Error"))
                 return executionStatus;
+
+            TACT++;
         }
 
         if (CURRENT_STAGE == DECODE) {
@@ -104,6 +107,8 @@ public class EmulatorCPU {
 
             if (Objects.equals(executionStatus.get("State"), "Error"))
                 return executionStatus;
+
+            TACT++;
         }
 
         PREVIOUS_STAGE = CURRENT_STAGE;
@@ -137,6 +142,8 @@ public class EmulatorCPU {
 
         if (IS_HALT)
             executionStatus.put("Comment", executionStatus.get("Comment") + "\n\nВыполнение программы завершено");
+
+        TACT++;
 
         return executionStatus;
     }
@@ -181,6 +188,8 @@ public class EmulatorCPU {
 
         if (IS_HALT)
             executionStatus.put("Comment", executionStatus.get("Comment") + "\n\nВыполнение программы завершено");
+
+        TACT++;
 
         return executionStatus;
     }

@@ -27,6 +27,7 @@ public class EmulatorViewModel {
     }
 
     public void resetEmulator() {
+        EmulatorCPU.TACT = 0;
         EmulatorCPU.IS_HALT = true;
         EmulatorCPU.ZERO_FLAG = true;
         EmulatorCPU.SIGN_FLAG = false;
