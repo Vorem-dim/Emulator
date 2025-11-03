@@ -6,28 +6,77 @@ import ViewModel.EmulatorViewModel;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.*;
+import java.util.List;
 
 public class EmulatorGUI {
-    private static final String COMMAND_FORMAT = "%08X";
-    private static final String NUMBER_FORMAT = "%04X";
+    private final String numberFormat = "%04X";
+    private final String commandFormat = "%08X";
+
+    private final EmulatorViewModel emulator = new EmulatorViewModel();
 
     private JTextArea statusArea;
     private JCheckBox zeroFlag, signFlag, carryFlag;
     private JTable registersTable, dataMemoryTable, commandMemoryTable;
     private JTextField dataBus, commandBus, executeStage, currentStage, tact;
 
-    private final EmulatorViewModel emulator = new EmulatorViewModel();
-
     public EmulatorGUI() {
-        JFrame frame = new JFrame("Эмулятор трехадресной Гарвардской архитектуры");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setLayout(new BorderLayout());
+        List<HashMap<String, String>> registers = new ArrayList<>(List.of(
+                new HashMap<>(Map.of(
+                        "Register", "R0 (Аккумулятор)",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R1",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R2",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R3",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R4",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R5",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R6",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "R7",
+                        "Value", String.format(numberFormat, 0),
+                        "Description", "0"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "IR (Регистр команд)",
+                        "Value", String.format(commandFormat, 0),
+                        "Description", "—"
+                )),
+                new HashMap<>(Map.of(
+                        "Register", "PC (Счетчик команд)",
+                        "Value", String.format(commandFormat, 0),
+                        "Description", "0"
+                ))
+        ));
 
         JPanel statusPanel = createStatusPanel();
-        JPanel controlPanel = createControlPanel();
-        JPanel registersPanel = createRegistersPanel();
+        JPanel controlPanel = createControlPanel(registers);
+        JPanel registersPanel = createRegistersPanel(registers);
         JPanel dataMemoryPanel = createMemoryPanel("Память данных", false);
         JPanel programMemoryPanel = createMemoryPanel("Память программ", true);
 
@@ -39,33 +88,36 @@ public class EmulatorGUI {
         memoryPanel.add(programMemoryPanel);
         memoryPanel.add(dataMemoryPanel);
 
+        JFrame frame = new JFrame("Эмулятор трехадресной Гарвардской архитектуры");
+
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(1200, 800);
+        frame.setLayout(new BorderLayout());
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+
         frame.add(topPanel, BorderLayout.NORTH);
         frame.add(memoryPanel, BorderLayout.CENTER);
         frame.add(controlPanel, BorderLayout.SOUTH);
-
-        frame.setSize(1200, 800);
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
     }
 
-    private JPanel createRegistersPanel() {
-        String[] columnNames = { "Регистр", "Значение (hex)", "Пояснение" };
+    private JPanel createRegistersPanel(List<HashMap<String, String>> registers) {
+        String[] columnNames = { "Регистр", "Значение", "Пояснение" };
 
         DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0);
 
-        tableModel.addRow(new Object[] {"R0 (Аккумулятор)", String.format(NUMBER_FORMAT, 0), 0});
-        tableModel.addRow(new Object[] {"R1", String.format(NUMBER_FORMAT, 0), 0});
-        tableModel.addRow(new Object[] {"IR (Регистр команд)", String.format(COMMAND_FORMAT, 0), "—"});
-        tableModel.addRow(new Object[] {"PC (Счетчик команд)", String.format(COMMAND_FORMAT, 0), 0});
+        registers.forEach(register -> tableModel.addRow(new Object[] {
+                register.get("Register"),
+                register.get("Value"),
+                register.get("Description")
+        }));
 
         registersTable = new JTable(tableModel);
-
-        JScrollPane scrollPane = new JScrollPane(registersTable);
 
         JPanel panel = new JPanel(new BorderLayout());
 
         panel.setBorder(BorderFactory.createTitledBorder("Регистры общего назначения"));
-        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(new JScrollPane(registersTable), BorderLayout.CENTER);
 
         return panel;
     }
@@ -74,8 +126,8 @@ public class EmulatorGUI {
         String[] columnNames = new String[9];
 
         columnNames[0] = "Адрес";
-        for (int i = 0; i < 8; i++)
-            columnNames[i + 1] = String.format("%02X", i);
+        for (int i = 1; i < 9; i++)
+            columnNames[i] = String.format("%02X", i);
 
         DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0);
 
@@ -84,7 +136,7 @@ public class EmulatorGUI {
 
             row[0] = String.format("%02X", i);
             for (int j = 0; j < 16 && i + j < EmulatorCPU.MEMORY_SIZE; j++)
-                row[j + 1] = String.format(isCommandMemory ? COMMAND_FORMAT : NUMBER_FORMAT, 0);
+                row[j + 1] = String.format(isCommandMemory ? commandFormat : numberFormat, 0);
 
             tableModel.addRow(row);
         }
@@ -95,34 +147,31 @@ public class EmulatorGUI {
         else
             dataMemoryTable = table;
 
-        JScrollPane scrollPane = new JScrollPane(table);
-
         JPanel panel = new JPanel(new BorderLayout());
 
         panel.setBorder(BorderFactory.createTitledBorder(title));
-        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
         return panel;
     }
 
     private JPanel createStatusPanel() {
-        statusArea = new JTextArea(5, 30);
+        statusArea = new JTextArea("Эмулятор готов к работе", 5, 30);
         statusArea.setEditable(false);
-        statusArea.setText("Эмулятор готов к работе");
 
-        zeroFlag = new JCheckBox("Zero", EmulatorCPU.ZERO_FLAG);
+        zeroFlag = new JCheckBox("Zero", true);
         zeroFlag.setEnabled(false);
 
-        signFlag = new JCheckBox("Sign", EmulatorCPU.SIGN_FLAG);
+        signFlag = new JCheckBox("Sign", false);
         signFlag.setEnabled(false);
 
-        carryFlag = new JCheckBox("Carry", EmulatorCPU.CARRY_FLAG);
+        carryFlag = new JCheckBox("Carry", false);
         carryFlag.setEnabled(false);
 
-        dataBus = new JTextField(String.format(NUMBER_FORMAT, 0), 10);
+        dataBus = new JTextField(String.format(numberFormat, 0), 10);
         dataBus.setEditable(false);
 
-        commandBus = new JTextField(String.format(COMMAND_FORMAT, 0), 10);
+        commandBus = new JTextField(String.format(commandFormat, 0), 10);
         commandBus.setEditable(false);
 
         executeStage = new JTextField(10);
@@ -131,8 +180,7 @@ public class EmulatorGUI {
         currentStage = new JTextField(10);
         currentStage.setEditable(false);
 
-        tact = new JTextField(10);
-        tact.setText(String.valueOf(EmulatorCPU.TACT));
+        tact = new JTextField(String.valueOf(0), 10);
         tact.setEditable(false);
 
         JPanel flagsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -167,25 +215,21 @@ public class EmulatorGUI {
         dataBusPanel.add(dataBus);
 
         JPanel busPanel = new JPanel(new GridLayout(2, 1));
-        busPanel.setBorder(BorderFactory.createTitledBorder("Системные шины"));
         busPanel.add(commandBusPanel);
         busPanel.add(dataBusPanel);
 
-        JScrollPane statusScroll = new JScrollPane(statusArea);
-
-        JPanel panel = new JPanel(new GridLayout(5, 1, 0, 0));
-
+        JPanel panel = new JPanel(new GridLayout(5, 1));
         panel.setBorder(BorderFactory.createTitledBorder("Состояние процессора"));
         panel.add(flagsPanel);
         panel.add(countTacts);
         panel.add(emulatorStages);
         panel.add(busPanel);
-        panel.add(statusScroll);
+        panel.add(new JScrollPane(statusArea));
 
         return panel;
     }
 
-    private JPanel createControlPanel() {
+    private JPanel createControlPanel(List<HashMap<String, String>> registers) {
         JButton tactButton = new JButton("Такт");
         tactButton.addActionListener(_ -> updateDisplay(emulator.executeEmulatorTact()));
 
@@ -199,14 +243,14 @@ public class EmulatorGUI {
         resetButton.addActionListener(_ -> {
             emulator.resetEmulator();
 
-            resetDisplay();
+            resetDisplay(registers);
         });
 
         JButton loadButton = new JButton("Загрузить программу");
         loadButton.addActionListener(_ -> {
             emulator.resetEmulator();
 
-            resetDisplay();
+            resetDisplay(registers);
 
             updateDisplay(emulator.loadTestProgram());
         });
@@ -222,104 +266,92 @@ public class EmulatorGUI {
         return panel;
     }
 
-    private void resetDisplay() {
+    private void resetDisplay(List<HashMap<String, String>> registers) {
         DefaultTableModel tableModel = (DefaultTableModel) registersTable.getModel();
 
-        tableModel.setValueAt(String.format(NUMBER_FORMAT, 0), 0, 1);
-        tableModel.setValueAt(String.format(NUMBER_FORMAT, 0), 1, 1);
-        tableModel.setValueAt(String.format(COMMAND_FORMAT, 0), 2, 1);
-        tableModel.setValueAt(String.format(COMMAND_FORMAT, 0), 3, 1);
+        for (int i = 0; i < registers.size(); i++) {
+            tableModel.setValueAt(registers.get(i).get("Value"), i, 1);
+            tableModel.setValueAt(registers.get(i).get("Description"), i, 2);
+        }
 
-        tableModel.setValueAt(0, 0, 2);
-        tableModel.setValueAt(0, 1, 2);
-        tableModel.setValueAt("—", 2, 2);
-        tableModel.setValueAt(0, 3, 2);
+        int[] emptyCommandMemory = new int[EmulatorCPU.MEMORY_SIZE];
+        short[] emptyDataMemory = new short[EmulatorCPU.MEMORY_SIZE];
 
-        String[] emptyMemory = new String[EmulatorCPU.MEMORY_SIZE];
-        Arrays.fill(emptyMemory, "0");
+        Arrays.fill(emptyCommandMemory, 0);
+        Arrays.fill(emptyDataMemory, (short) 0);
 
-        updateMemoryTable(dataMemoryTable, emptyMemory, false);
-        updateMemoryTable(commandMemoryTable, emptyMemory, true);
+        updateMemoryTable(commandMemoryTable, emptyCommandMemory);
+        updateMemoryTable(dataMemoryTable, emptyDataMemory);
 
         statusArea.setText("Эмулятор готов к работе");
 
-        zeroFlag.setSelected(EmulatorCPU.ZERO_FLAG);
-        signFlag.setSelected(EmulatorCPU.SIGN_FLAG);
-        carryFlag.setSelected(EmulatorCPU.CARRY_FLAG);
+        zeroFlag.setSelected(true);
+        signFlag.setSelected(false);
+        carryFlag.setSelected(false);
 
-        dataBus.setText(String.format(NUMBER_FORMAT, 0));
-        commandBus.setText(String.format(COMMAND_FORMAT, 0));
+        dataBus.setText(String.format(numberFormat, 0));
+        commandBus.setText(String.format(commandFormat, 0));
 
         executeStage.setText("");
         currentStage.setText("");
 
-        tact.setText(String.valueOf(EmulatorCPU.TACT));
+        tact.setText("0");
     }
 
-    private void updateDisplay(HashMap<String, String> params) {
+    private void updateDisplay(HashMap<String, Object> params) {
         DefaultTableModel tableModel = (DefaultTableModel) registersTable.getModel();
 
-        String registers = params.get("registers");
+        short[] registers = (short[]) params.get("registers");
         if (registers != null) {
-            String[] registersArray = registers.replaceAll("[\\[\\]]", "").split(", ");
-
-            tableModel.setValueAt(String.format(NUMBER_FORMAT, Integer.parseUnsignedInt(registersArray[0], 16)), 0, 1);
-            tableModel.setValueAt(String.format(NUMBER_FORMAT, Integer.parseUnsignedInt(registersArray[1], 16)), 1, 1);
-
-            tableModel.setValueAt((short) Integer.parseInt(registersArray[0], 16), 0, 2);
-            tableModel.setValueAt((short) Integer.parseInt(registersArray[1], 16), 1, 2);
+            for (int i = 0; i < registers.length; i++) {
+                tableModel.setValueAt(String.format(numberFormat, registers[i]), i, 1);
+                tableModel.setValueAt(registers[i], i, 2);
+            }
         }
 
-        String instructionRegister = params.get("IR");
+        Integer instructionRegister = (Integer) params.get("IR");
         if (instructionRegister != null) {
-            tableModel.setValueAt(String.format(
-                    COMMAND_FORMAT,
-                    Integer.parseUnsignedInt(instructionRegister, 16)
-            ), 2, 1);
+            tableModel.setValueAt(String.format(commandFormat, instructionRegister), EmulatorCPU.REGISTERS_COUNT, 1);
+            tableModel.setValueAt(params.getOrDefault("commentIR", "Без комментариев"), EmulatorCPU.REGISTERS_COUNT, 2);
 
-            tableModel.setValueAt(EmulatorCPU.InstructionRegisterComment(instructionRegister), 2, 2);
-
-            commandBus.setText(String.format(
-                    COMMAND_FORMAT,
-                    Integer.parseUnsignedInt(instructionRegister, 16)
-            ));
+            commandBus.setText(String.format(commandFormat, instructionRegister));
         }
 
-        String programCounter = params.get("PC");
+        Integer programCounter = (Integer) params.get("PC");
         if (programCounter != null) {
-            tableModel.setValueAt(String.format(COMMAND_FORMAT, Integer.parseUnsignedInt(programCounter, 16)), 3, 1);
-
-            tableModel.setValueAt(Integer.parseInt(programCounter, 16), 3, 2);
+            tableModel.setValueAt(String.format(commandFormat, programCounter), EmulatorCPU.REGISTERS_COUNT + 1, 1);
+            tableModel.setValueAt(programCounter, EmulatorCPU.REGISTERS_COUNT + 1, 2);
         }
 
-        String dataMemory = params.get("Data");
+        short[] dataMemory = (short[]) params.get("dataMemory");
         if (dataMemory != null)
-            updateMemoryTable(dataMemoryTable, dataMemory.replaceAll("[\\[\\]]", "").split(", "), false);
+            updateMemoryTable(dataMemoryTable, dataMemory);
 
-        String commandMemory = params.get("Commands");
+        int[] commandMemory = (int[]) params.get("commandMemory");
         if (commandMemory != null)
-            updateMemoryTable(commandMemoryTable, commandMemory.replaceAll("[\\[\\]]", "").split(", "), true);
+            updateMemoryTable(commandMemoryTable, commandMemory);
 
-        String comment = params.get("Comment");
+        String comment = (String) params.get("comment");
         if (comment != null)
             statusArea.setText(comment);
 
-        String dataBus = params.get("dataBus");
+        Short dataBus = (Short) params.get("dataBus");
         if (dataBus != null)
-            this.dataBus.setText(String.format(NUMBER_FORMAT, (short) Integer.parseInt(dataBus, 16)));
+            this.dataBus.setText(String.format(numberFormat, dataBus));
 
-        zeroFlag.setSelected(EmulatorCPU.ZERO_FLAG);
-        signFlag.setSelected(EmulatorCPU.SIGN_FLAG);
-        carryFlag.setSelected(EmulatorCPU.CARRY_FLAG);
+        zeroFlag.setSelected((boolean) params.getOrDefault("zeroFlag", zeroFlag.isSelected()));
+        signFlag.setSelected((boolean) params.getOrDefault("signFlag", signFlag.isSelected()));
+        carryFlag.setSelected((boolean) params.getOrDefault("carryFlag", carryFlag.isSelected()));
 
-        if (EmulatorCPU.PREVIOUS_STAGE != EmulatorCPU.CURRENT_STAGE)
-            executeStage.setText(EmulatorCPU.PREVIOUS_STAGE.toString());
-        currentStage.setText(EmulatorCPU.CURRENT_STAGE.toString());
+        if (params.get("previousStage") != null)
+            executeStage.setText(params.get("previousStage").toString());
 
-        tact.setText(String.valueOf(EmulatorCPU.TACT));
+        currentStage.setText(params.get("currentStage").toString());
+
+        tact.setText(params.getOrDefault("countTacts", 0).toString());
     }
 
-    private void updateMemoryTable(JTable table, String[] memory, boolean isCommandMemory) {
+    private void updateMemoryTable(JTable table, int[] memory) {
         DefaultTableModel model = (DefaultTableModel) table.getModel();
 
         int rowCount = model.getRowCount();
@@ -327,10 +359,19 @@ public class EmulatorGUI {
             int addressOffset = i * 8;
 
             for (int j = 0; j < 8; j++)
-                model.setValueAt(String.format(
-                        isCommandMemory ? COMMAND_FORMAT : NUMBER_FORMAT,
-                        Integer.parseUnsignedInt(memory[addressOffset + j], 16)
-                ), i, j + 1);
+                model.setValueAt(String.format(commandFormat, memory[addressOffset + j]), i, j + 1);
+        }
+    }
+
+    private void updateMemoryTable(JTable table, short[] memory) {
+        DefaultTableModel model = (DefaultTableModel) table.getModel();
+
+        int rowCount = model.getRowCount();
+        for (int i = 0; i < rowCount; i++) {
+            int addressOffset = i * 8;
+
+            for (int j = 0; j < 8; j++)
+                model.setValueAt(String.format(numberFormat, memory[addressOffset + j]), i, j + 1);
         }
     }
 }

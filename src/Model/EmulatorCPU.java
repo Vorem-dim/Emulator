@@ -1,339 +1,301 @@
 package Model;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import Mapper.OperationCPUMapper;
+
+import java.util.*;
 
 import static Model.InstructionStages.*;
+import static Model.ExecutionStatus.*;
 
 public class EmulatorCPU {
-    public static int TACT = 0;
-    public static boolean IS_HALT = true;
     public static final int MEMORY_SIZE = 256;
-    public static InstructionStages CURRENT_STAGE = FETCH;
-    public static InstructionStages PREVIOUS_STAGE = FETCH;
+    public static final int REGISTERS_COUNT = 8;
 
-    public static boolean ZERO_FLAG = true;
-    public static boolean SIGN_FLAG = false;
-    public static boolean CARRY_FLAG = false;
+    private final OperationCPUMapper operationCPUMapper;
+    private final short[] dataMemory, registers;
+    private final int[] commandMemory;
 
-    private static final HashMap<Integer, Operations> OPERATIONS = new HashMap<>(Map.of(
-            0, Operations.LOAD,
-            1, Operations.ADD,
-            2, Operations.STORE,
-            3, Operations.HALT
-    ));
-    private HashMap<String, String> decodeInstruction = new HashMap<>();
+    private HashMap<String, Object> decodeInstruction;
+    private boolean zeroFlag, signFlag, carryFlag, isHalt;
+    private InstructionStages currentStage, previousStage;
+    private int programCounter, instructionRegister, countTacts;
 
-    private final String[] registers;
-    private String programCounter;
-    private String instructionRegister;
+    public static void fillInfoStatusCPU(HashMap<String, Object> params, EmulatorCPU emulatorCPU) {
+        params.put("registers", emulatorCPU.registers);
+        params.put("dataMemory", emulatorCPU.dataMemory);
+        params.put("commandMemory", emulatorCPU.commandMemory);
 
-    private final String[] commandMemory;
-    private final String[] dataMemory;
+        params.put("IR", emulatorCPU.instructionRegister);
+        params.put("PC", emulatorCPU.programCounter);
 
-    public static String InstructionRegisterComment(String command) {
-        Operations operation = OPERATIONS.get(
-                (Integer.parseInt(command, 16) & Integer.parseUnsignedInt("FF000000", 16)) >> 24
-        );
-        int[] operands = new int[] {
-                (Integer.parseInt(command, 16) & Integer.parseUnsignedInt("00FF0000", 16)) >> 16,
-                (Integer.parseInt(command, 16) & Integer.parseUnsignedInt("0000FF00", 16)) >> 8,
-                (Integer.parseInt(command, 16) & Integer.parseUnsignedInt("000000FF", 16))
-        };
+        params.put("zeroFlag", emulatorCPU.zeroFlag);
+        params.put("signFlag", emulatorCPU.signFlag);
+        params.put("carryFlag", emulatorCPU.carryFlag);
 
-        return switch (operation) {
-            case HALT -> operation.toString();
-            case ADD -> String.format(
-                    "%s %s %s %s",
+        params.put("currentStage", emulatorCPU.currentStage);
+        params.put("previousStage", emulatorCPU.previousStage);
+
+        params.put("countTacts", emulatorCPU.countTacts);
+
+        Operations operation = emulatorCPU.operationCPUMapper.toOperation(String.format(
+                "%02X",
+                (emulatorCPU.instructionRegister & Long.parseUnsignedLong("FF000000", 16)) >> 24
+        ));
+
+        if (operation == Operations.LOAD) {
+            int index = (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF00", 16)) >> 8;
+            params.put("dataBus", emulatorCPU.dataMemory[index]);
+        }
+
+        if (emulatorCPU.isHalt)
+            params.put("comment", "Выполнение операций завершено");
+
+        switch (operation) {
+            case HALT -> params.put("commentIR", operation);
+            case JUMP -> params.put("commentIR", String.format(
+                    "%s %02X",
                     operation,
-                    operands[0] == 0 ? "ACC" : "R1",
-                    operands[1] == 0 ? "ACC" : "R1",
-                    operands[2] == 0 ? "ACC" : "R1"
-            );
-            default -> String.format(
-                    "%s %s %s",
+                    (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16
+            ));
+            case ADD -> params.put("commentIR", String.format(
+                    "%s %02X %02X %02X",
                     operation,
-                    operands[0] == 0 ? "ACC" : "R1",
-                    String.format("%02X", operands[1])
-            );
-        };
+                    (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16,
+                    (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF00", 16)) >> 8,
+                    emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF", 16)
+            ));
+            default -> params.put("commentIR", String.format(
+                    "%s %02X %02X",
+                    operation,
+                    (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16,
+                    (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF00", 16)) >> 8
+            ));
+        }
     }
 
     public EmulatorCPU() {
-        commandMemory = new String[MEMORY_SIZE];
-        dataMemory = new String[MEMORY_SIZE];
+        countTacts = 0;
 
-        registers = new String[] { Integer.toHexString(0), Integer.toHexString(0) };
-        programCounter = Integer.toHexString(0);
-        instructionRegister = Integer.toHexString(0);
+        isHalt = true;
+        zeroFlag = true;
+        signFlag = false;
+        carryFlag = false;
 
-        Arrays.fill(commandMemory, Integer.toHexString(0));
-        Arrays.fill(dataMemory, Integer.toHexString(0));
+        currentStage = FETCH;
+        previousStage = null;
+
+        decodeInstruction = new HashMap<>();
+
+        operationCPUMapper = new OperationCPUMapper();
+
+        programCounter = 0;
+        instructionRegister = 0;
+
+        dataMemory = new short[MEMORY_SIZE];
+        commandMemory = new int[MEMORY_SIZE];
+        registers = new short[REGISTERS_COUNT];
+
+        Arrays.fill(commandMemory, 0);
+        Arrays.fill(dataMemory, (short) 0);
+        Arrays.fill(registers, (short) 0);
     }
 
-    public HashMap<String, String> setEmulatorMemory(String[] dataMemory, String[] commandMemory) {
+    public HashMap<String, Object> setEmulatorMemory(short[] dataMemory, int[] commandMemory) {
+        isHalt = false;
+
         System.arraycopy(dataMemory, 0, this.dataMemory, 0, dataMemory.length);
 
         System.arraycopy(commandMemory, 0, this.commandMemory, 0, commandMemory.length);
 
         return new HashMap<>(Map.of(
-                "Data", Arrays.toString(this.dataMemory),
-                "Commands", Arrays.toString(this.commandMemory)
+                "data", this.dataMemory,
+                "commands", this.commandMemory,
+                "comment", "Программа загружена"
         ));
     }
 
-    public HashMap<String, String> executeInstruction() {
-        HashMap<String, String> executionStatus;
+    public HashMap<String, Object> executeInstruction() {
+        if (isHalt)
+            return new HashMap<>(Map.of("status", OK, "comment", "Выполнение операций завершено", "isHalt", true));
 
-        if (IS_HALT) {
-            executionStatus = new HashMap<>(Map.of("Comment", "Выполнение операций завершено"));
+        HashMap<String, Object> executionStatus;
 
-            return executionStatus;
-        }
+        if (currentStage == FETCH) {
+            countTacts++;
+            previousStage = currentStage;
+            currentStage = DECODE;
 
-        if (CURRENT_STAGE == FETCH) {
             executionStatus = executeStageFetch();
 
-            if (Objects.equals(executionStatus.get("State"), "Error"))
+            if (Objects.equals(executionStatus.get("status"), ERROR))
                 return executionStatus;
-
-            TACT++;
         }
 
-        if (CURRENT_STAGE == DECODE) {
+        if (currentStage == DECODE) {
+            countTacts++;
+            previousStage = currentStage;
+            currentStage = EXECUTE;
+
             executionStatus = executeStageDecode();
 
-            if (Objects.equals(executionStatus.get("State"), "Error"))
+            if (Objects.equals(executionStatus.get("status"), ERROR))
                 return executionStatus;
-
-            TACT++;
         }
 
-        PREVIOUS_STAGE = CURRENT_STAGE;
+        countTacts++;
+        programCounter++;
+        previousStage = currentStage;
+        currentStage = FETCH;
 
         executionStatus = executeStageExecute();
-
-        if (Objects.equals(executionStatus.get("State"), "Error"))
-            return executionStatus;
-
-        executionStatus.put("PC", programCounter);
-        executionStatus.put("IR", instructionRegister);
-        executionStatus.put("registers", Arrays.toString(registers));
-        executionStatus.put("Data", Arrays.toString(this.dataMemory));
-        executionStatus.put("Commands", Arrays.toString(this.commandMemory));
-        executionStatus.put("Comment", String.format(
-                "Выполнена команда: %s %s",
-                OPERATIONS.get(Integer.parseInt(decodeInstruction.get("operation"), 16)),
-                decodeInstruction.get("operands").replaceAll("[, \\[\\]]", "")
-        ));
-
-        if (PREVIOUS_STAGE != FETCH) {
-            int operation = Integer.parseInt(decodeInstruction.get("operation"), 16);
-            int operand = Integer.parseInt(
-                    decodeInstruction.get("operands").replaceAll("[\\[\\]]", "").split(", ")[1],
-                    16
-            );
-
-            if (OPERATIONS.get(operation) == Operations.LOAD)
-                executionStatus.put("dataBus", dataMemory[operand]);
-        }
-
-        if (IS_HALT)
-            executionStatus.put("Comment", executionStatus.get("Comment") + "\n\nВыполнение программы завершено");
-
-        TACT++;
+        executionStatus.put("comment", "Выполнена инструктция процессора");
 
         return executionStatus;
     }
 
-    public HashMap<String, String> executeInstructionStage() {
-        HashMap<String, String> executionStatus = new HashMap<>();
+    public HashMap<String, Object> executeInstructionStage() {
+        if (isHalt)
+            return new HashMap<>(Map.of("status", OK, "comment", "Выполнение операций завершено", "isHalt", true));
 
-        if (IS_HALT) {
-            executionStatus = new HashMap<>(Map.of("Comment", "Выполнение операций завершено"));
+        previousStage = currentStage;
+        countTacts++;
 
-            return executionStatus;
-        }
-
-        PREVIOUS_STAGE = CURRENT_STAGE;
-
-        switch(CURRENT_STAGE) {
-            case FETCH -> executionStatus = executeStageFetch();
-            case DECODE -> executionStatus = executeStageDecode();
-            case EXECUTE -> executionStatus = executeStageExecute();
-        }
-
-        if (Objects.equals(executionStatus.get("State"), "Error"))
-            return executionStatus;
-
-        executionStatus.put("PC", programCounter);
-        executionStatus.put("IR", instructionRegister);
-        executionStatus.put("registers", Arrays.toString(registers));
-        executionStatus.put("Data", Arrays.toString(dataMemory));
-        executionStatus.put("Commands", Arrays.toString(commandMemory));
-        executionStatus.put("Comment", String.format("Выполнен этап %s", PREVIOUS_STAGE));
-
-        if (PREVIOUS_STAGE != FETCH) {
-            int operation = Integer.parseInt(decodeInstruction.get("operation"), 16);
-            int operand = Integer.parseInt(
-                    decodeInstruction.get("operands").replaceAll("[\\[\\]]", "").split(", ")[1],
-                    16
-            );
-
-            if (OPERATIONS.get(operation) == Operations.LOAD)
-                executionStatus.put("dataBus", dataMemory[operand]);
-        }
-
-        if (IS_HALT)
-            executionStatus.put("Comment", executionStatus.get("Comment") + "\n\nВыполнение программы завершено");
-
-        TACT++;
-
-        return executionStatus;
+        return switch(currentStage) {
+            case FETCH -> {
+                currentStage = DECODE;
+                yield executeStageFetch();
+            }
+            case DECODE -> {
+                currentStage = EXECUTE;
+                yield executeStageDecode();
+            }
+            case EXECUTE -> {
+                programCounter++;
+                currentStage = FETCH;
+                yield executeStageExecute();
+            }
+        };
     }
 
-    private HashMap<String, String> executeStageFetch() {
-        HashMap<String, String> result = new HashMap<>(Map.of("State", "OK", "Comment", ""));
+    private HashMap<String, Object> executeStageFetch() {
+        Integer instruction = readCommandMemory(programCounter);
 
-        if (Integer.parseInt(programCounter, 16) < 0 || Integer.parseInt(programCounter, 16) >= MEMORY_SIZE) {
-            result.put("State", "Error");
-            result.put("Comment", "Счетчик выходит за пределы памяти");
+        if (instruction == null)
+            return new HashMap<>(Map.of(
+                    "status", ERROR,
+                    "comment", "Ошибка чтении памяти команд",
+                    "isHalt", isHalt
+            ));
 
-            return result;
-        }
-
-        instructionRegister = readCommandMemory(programCounter);
-        if (instructionRegister == null) {
-            result.put("State", "Error");
-            result.put("Comment", "Ошибка чтении памяти команд");
-
-            instructionRegister = Integer.toHexString(0);
-
-            return result;
-        }
+        instructionRegister = instruction;
 
         decodeInstruction = new HashMap<>();
 
-        CURRENT_STAGE = DECODE;
-
-        return result;
+        return new HashMap<>(Map.of("status", OK, "comment", "Выполнен этап инструкции FETCH"));
     }
 
-    private HashMap<String, String> executeStageDecode() {
-        HashMap<String, String> result = new HashMap<>(Map.of("State", "OK", "Comment", ""));
+    private HashMap<String, Object> executeStageDecode() {
+        String operationCode = String.format(
+                "%02X",
+                (instructionRegister & Long.parseUnsignedLong("FF000000", 16)) >> 24
+        );
 
-        int instruction = Integer.parseInt(instructionRegister, 16);
-
-        String operationCode = String.format("%02X", (instruction & Integer.parseUnsignedInt("FF000000", 16)) >> 24);
-
-        String[] operands = new String[] {
-                String.format("%02X", (instruction & Integer.parseUnsignedInt("00FF0000", 16)) >> 16),
-                String.format("%02X", (instruction & Integer.parseUnsignedInt("0000FF00", 16)) >> 8),
-                String.format("%02X", (instruction & Integer.parseUnsignedInt("000000FF", 16)))
-        };
-
-        decodeInstruction = new HashMap<>(Map.of(
-                "operation", operationCode,
-                "operands", Arrays.toString(operands)
+        List<Integer> operands = new ArrayList<>(List.of(
+                (instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16,
+                (instructionRegister & Integer.parseUnsignedInt("FF00", 16)) >> 8,
+                instructionRegister & Integer.parseUnsignedInt("FF", 16)
         ));
 
-        CURRENT_STAGE = EXECUTE;
+        decodeInstruction = new HashMap<>(Map.of("operation", operationCode, "operands", operands));
 
-        return result;
+        return new HashMap<>(Map.of("status", OK, "isHalt", isHalt, "comment", "Выполнен этап инструкции DECODE"));
     }
 
-    private HashMap<String, String> executeStageExecute() {
-        HashMap<String, String> result = new HashMap<>(Map.of("State", "OK", "Comment", ""));
+    private HashMap<String, Object> executeStageExecute() {
+        HashMap<String, Object> result = new HashMap<>(Map.of("status", OK));
 
-        Operations operation = OPERATIONS.get(Integer.parseInt(decodeInstruction.get("operation"), 16));
+        Operations operation = operationCPUMapper.toOperation((String) decodeInstruction.get("operation"));
 
-        String[] operands = decodeInstruction.get("operands").replaceAll("[\\[\\]]", "").split(", ");
+        List<Integer> operands = (List<Integer>) decodeInstruction.get("operands");
 
         switch (operation) {
             case Operations.LOAD -> {
-                String data = readDataMemory(operands[1]);
+                Short data = readDataMemory(operands.get(1));
                 if (data == null) {
-                    result.put("State", "Error");
-                    result.put("Comment", "Ошибка чтения памяти данных");
+                    result.put("status", ERROR);
+                    result.put("comment", "Ошибка чтения памяти данных");
 
                     break;
                 }
 
-                registers[Integer.parseInt(operands[0], 16)] = data;
+                registers[operands.get(0)] = data;
 
-                changeFlags(Integer.parseInt(registers[0], 16), false);
+                changeFlags(registers[0], false);
             }
             case Operations.ADD -> {
-                int offset = Integer.parseInt(String.format("0000%s000", CARRY_FLAG ? "8" : "0"), 16);
+                int offset = Integer.parseInt(String.format("0000%s000", carryFlag ? "8" : "0"), 16);
 
-                if (SIGN_FLAG)
+                if (signFlag)
                     offset = -offset - 1;
 
-                short number1 = (short) Integer.parseInt(registers[Integer.parseInt(operands[0], 16)], 16);
-                short number2 = (short) Integer.parseInt(registers[Integer.parseInt(operands[1], 16)], 16);
+                short number1 = registers[operands.get(0)];
+                short number2 = registers[operands.get(1)];
                 int total = (int) number1 + (int) number2 + offset;
 
                 changeFlags(total, true);
 
                 short totalShort;
-                if (CARRY_FLAG) {
+                if (carryFlag) {
                      totalShort = (short) (total & Integer.parseInt("7FFF", 16));
 
-                    if (SIGN_FLAG)
+                    if (signFlag)
                         totalShort *= -1;
                 }
                 else
                     totalShort = (short) total;
 
-                registers[Integer.parseInt(operands[2], 16)] = String.format("%04X", totalShort);
+                registers[operands.get(2)] = totalShort;
             }
             case Operations.STORE -> {
-                if (!writeMemory(operands[1], registers[Integer.parseInt(operands[0], 16)])) {
-                    result.put("State", "Error");
-                    result.put("Comment", "Ошибка записи данных в память");
+                if (!writeMemory(operands.get(1), registers[operands.get(0)])) {
+                    result.put("status", ERROR);
+                    result.put("comment", "Ошибка записи данных в память");
                 }
             }
-            case Operations.HALT -> IS_HALT = true;
+            case Operations.HALT -> isHalt = true;
         }
 
-        if (Objects.equals(result.get("State"), "Error"))
-            return result;
-
-        programCounter = Integer.toHexString(Integer.parseInt(programCounter, 16) + 1);
-
-        CURRENT_STAGE = FETCH;
-
+        result.put("isHalt", isHalt);
+        result.put("comment", "Выполнен этап инструкции EXECUTE");
         return result;
     }
 
     private void changeFlags(int number, boolean checkCarry) {
-        SIGN_FLAG = number < 0;
-        ZERO_FLAG = number == 0;
+        signFlag = number < 0;
+        zeroFlag = number == 0;
 
         if (checkCarry)
-            CARRY_FLAG = number > Short.MAX_VALUE || number < Short.MIN_VALUE;
+            carryFlag = number > Short.MAX_VALUE || number < Short.MIN_VALUE;
     }
 
-    private boolean writeMemory(String memoryAddress, String value) {
+    private boolean writeMemory(int memoryAddress, short value) {
         if (!checkAddress(memoryAddress))
             return false;
 
-        dataMemory[Integer.parseInt(memoryAddress, 16)] = value;
+        dataMemory[memoryAddress] = value;
 
         return true;
     }
 
-    private String readCommandMemory(String memoryAddress) {
-        return checkAddress(memoryAddress) ? commandMemory[Integer.parseInt(memoryAddress, 16)] : null;
+    private Integer readCommandMemory(int memoryAddress) {
+        return checkAddress(memoryAddress) ? commandMemory[memoryAddress] : null;
     }
 
-    private String readDataMemory(String memoryAddress) {
-        return checkAddress(memoryAddress) ? dataMemory[Integer.parseInt(memoryAddress, 16)] : null;
+    private Short readDataMemory(int memoryAddress) {
+        return checkAddress(memoryAddress) ? dataMemory[memoryAddress] : null;
     }
 
-    private boolean checkAddress(String memoryAddress) {
-        return Integer.parseInt(memoryAddress, 16) >= 0 && Integer.parseInt(memoryAddress, 16) < MEMORY_SIZE;
+    private boolean checkAddress(int memoryAddress) {
+        return memoryAddress >= 0 && memoryAddress < MEMORY_SIZE;
     }
 }
