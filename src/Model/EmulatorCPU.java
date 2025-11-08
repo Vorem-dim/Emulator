@@ -39,10 +39,10 @@ public class EmulatorCPU {
 
         Operations operation = emulatorCPU.operationCPUMapper.toOperation(String.format(
                 "%02X",
-                (emulatorCPU.instructionRegister & Long.parseUnsignedLong("FF000000", 16)) >> 24
+                (emulatorCPU.instructionRegister & Long.parseUnsignedLong("3F000000", 16)) >> 24
         ));
 
-        if (operation == Operations.LOAD) {
+        if (operation == Operations.LD) {
             int index = (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF00", 16)) >> 8;
             params.put("dataBus", emulatorCPU.dataMemory[index]);
         }
@@ -51,8 +51,8 @@ public class EmulatorCPU {
             params.put("comment", "Выполнение операций завершено");
 
         switch (operation) {
-            case HALT -> params.put("commentIR", operation);
-            case JUMP -> params.put("commentIR", String.format(
+            case HLT -> params.put("commentIR", operation);
+            case JMP, JZ -> params.put("commentIR", String.format(
                     "%s %02X",
                     operation,
                     (emulatorCPU.instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16
@@ -77,7 +77,7 @@ public class EmulatorCPU {
         countTacts = 0;
 
         isHalt = true;
-        zeroFlag = true;
+        zeroFlag = false;
         signFlag = false;
         carryFlag = false;
 
@@ -195,10 +195,7 @@ public class EmulatorCPU {
     }
 
     private HashMap<String, Object> executeStageDecode() {
-        String operationCode = String.format(
-                "%02X",
-                (instructionRegister & Long.parseUnsignedLong("FF000000", 16)) >> 24
-        );
+        int operationCode = (int) (instructionRegister & Long.parseUnsignedLong("FF000000", 16)) >> 24;
 
         List<Integer> operands = new ArrayList<>(List.of(
                 (instructionRegister & Integer.parseUnsignedInt("FF0000", 16)) >> 16,
@@ -214,13 +211,21 @@ public class EmulatorCPU {
     private HashMap<String, Object> executeStageExecute() {
         HashMap<String, Object> result = new HashMap<>(Map.of("status", OK));
 
-        Operations operation = operationCPUMapper.toOperation((String) decodeInstruction.get("operation"));
+        int operationCode = (int) decodeInstruction.get("operation");
+        boolean isImmediateValue = (operationCode & Long.parseUnsignedLong("80", 16)) >> 7 == 1;
+        boolean isIndirectAddress = (operationCode & Long.parseUnsignedLong("40", 16)) >> 6 == 1;
+        Operations operation = operationCPUMapper.toOperation(String.format(
+                "%02X",
+                operationCode & Long.parseUnsignedLong("3F", 16)
+        ));
 
         List<Integer> operands = (List<Integer>) decodeInstruction.get("operands");
 
         switch (operation) {
-            case Operations.LOAD -> {
-                Short data = readDataMemory(operands.get(1));
+            case Operations.LD -> {
+                short dataAddress = isIndirectAddress ? registers[operands.get(1)] : operands.get(1).shortValue();
+
+                Short data = isImmediateValue ? (Short) dataAddress : readDataMemory(dataAddress);
                 if (data == null) {
                     result.put("status", ERROR);
                     result.put("comment", "Ошибка чтения памяти данных");
@@ -228,54 +233,55 @@ public class EmulatorCPU {
                     break;
                 }
 
-                registers[operands.get(0)] = data;
-
-                changeFlags(registers[0], false);
+                registers[operands.getFirst()] = data;
             }
             case Operations.ADD -> {
-                int offset = Integer.parseInt(String.format("0000%s000", carryFlag ? "8" : "0"), 16);
-
-                if (signFlag)
-                    offset = -offset - 1;
 
                 short number1 = registers[operands.get(0)];
                 short number2 = registers[operands.get(1)];
-                int total = (int) number1 + (int) number2 + offset;
+                int total = (int) number1 + (int) number2;
 
-                changeFlags(total, true);
+                if (operands.contains(0)) {
+                    if (carryFlag)
+                        total += (registers[0] > 0) ? Short.MAX_VALUE : Short.MIN_VALUE;
 
-                short totalShort;
-                if (carryFlag) {
-                     totalShort = (short) (total & Integer.parseInt("7FFF", 16));
+                    carryFlag = total > Short.MAX_VALUE || total < Short.MIN_VALUE;
 
-                    if (signFlag)
-                        totalShort *= -1;
+                    short totalShort;
+                    if (carryFlag)
+                        totalShort = (short) (total - (total > 0 ? Short.MAX_VALUE : Short.MIN_VALUE));
+                    else
+                        totalShort = (short) total;
+
+                    registers[operands.get(2)] = totalShort;
+                } else {
+                    registers[operands.get(2)] = (short) total;
                 }
-                else
-                    totalShort = (short) total;
-
-                registers[operands.get(2)] = totalShort;
             }
-            case Operations.STORE -> {
+            case Operations.STR -> {
                 if (!writeMemory(operands.get(1), registers[operands.get(0)])) {
                     result.put("status", ERROR);
                     result.put("comment", "Ошибка записи данных в память");
                 }
             }
-            case Operations.HALT -> isHalt = true;
+            case Operations.JMP -> programCounter = operands.getFirst();
+            case Operations.JZ -> {
+                if (zeroFlag)
+                    programCounter = operands.getFirst();
+            }
+            case INC -> registers[operands.getFirst()] += 1;
+            case Operations.CMP -> {
+                short total = (short) (registers[operands.get(1)] - registers[operands.get(0)]);
+
+                zeroFlag = total == 0;
+                signFlag = total < 0;
+            }
+            case Operations.HLT -> isHalt = true;
         }
 
         result.put("isHalt", isHalt);
         result.put("comment", "Выполнен этап инструкции EXECUTE");
         return result;
-    }
-
-    private void changeFlags(int number, boolean checkCarry) {
-        signFlag = number < 0;
-        zeroFlag = number == 0;
-
-        if (checkCarry)
-            carryFlag = number > Short.MAX_VALUE || number < Short.MIN_VALUE;
     }
 
     private boolean writeMemory(int memoryAddress, short value) {

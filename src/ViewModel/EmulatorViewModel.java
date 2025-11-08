@@ -18,7 +18,7 @@ public class EmulatorViewModel {
         return params;
     }
 
-    public HashMap<String, Object> executeEmulatorStep() {
+    public HashMap<String, Object> executeEmulatorStep()    {
         HashMap<String, Object> params = emulator.executeInstruction();
 
         EmulatorCPU.fillInfoStatusCPU(params, emulator);
@@ -46,32 +46,36 @@ public class EmulatorViewModel {
 
     public HashMap<String, Object> loadTestProgram() {
         int[] commands = Arrays.stream(new String[] {
-                "00010000", // LOAD ACC 00
-                "00020100", // LOAD R1 01
-                "02010200", // ADD R1 R2 ACC
-                "00010200", // LOAD R1 02
-                "02000100", // ADD ACC R1 ACC
-                "00010300", // LOAD R1 03
-                "02000100", // ADD ACC R1 ACC
-                "01003000", // STORE ACC 30
-                "FF000000"  // HALT
+                "00070000", // LD R7 0x00 - Кол-во элементов массива
+                "80060000", // LD R6 0 - Установка счетчика
+                "80050100", // LD R5 0x01 - Установка адреса начала массива
+
+                "05060700", // CMP R6 R7 - Проверка границ массива
+                "040A0000", // JZ 0x0A - Выход из массива
+
+                "02050602", // ADD R5 R6 R2 - Адрес элемента массива
+                "40010200", // LD R1 R2 - Получение элемента массива
+                "02000100", // ADD ACC R1 ACC - Увеличение суммы элементов массива
+
+                "06060000", // INC R6 - Увелечение счетчика
+                "03030000", // JMP 0x03 - Возврат в начало цикла
+
+                "01003000", // STR ACC 30
+                "3F000000"  // HLT
         }).flatMapToInt(hexNumber -> IntStream.of(Integer.parseUnsignedInt(hexNumber, 16))).toArray();
 
-        String[] dataHex1 = new String[] {"3D4", "3F", "7FEC", "86FF"};
-        String[] dataHex2 = new String[] {"1F4", "A11F", "345A", "F09F"};
+        short[] data1 = new short[] { 10, 23, 109, 11011, -3048, 29938, 45, -12976, 768, -8756, 14 };
+        short[] data2 = new short[] { 10, 456, 1974, -19048, 2132, -24800, -485, 5263, -1478, 23621, -394 };
+        short[] data3 = new short[] { 8, 3475, 10322, -5273, 1200, -11724, 2000, 113, -27 };
 
-        short[] data1 = new short[dataHex1.length];
-        short[] data2 = new short[dataHex2.length];
+        int randomNumber = ThreadLocalRandom.current().nextInt(0, 3);
 
-        for (int i = 0; i < dataHex1.length; i++)
-            data1[i] = (short) Integer.parseInt(dataHex1[i], 16);
-
-        for (int i = 0; i < dataHex2.length; i++)
-            data2[i] = (short) Integer.parseInt(dataHex2[i], 16);
-
-        int randomNumber = ThreadLocalRandom.current().nextInt(0, 2);
-
-        HashMap<String, Object> params = emulator.setEmulatorMemory(randomNumber == 0 ? data1 : data2, commands);
+        HashMap<String, Object> params = switch (randomNumber) {
+            case 0 -> emulator.setEmulatorMemory(data1, commands);
+            case 1 -> emulator.setEmulatorMemory(data2, commands);
+            case 2 -> emulator.setEmulatorMemory(data3, commands);
+            default -> new HashMap<>();
+        };
 
         EmulatorCPU.fillInfoStatusCPU(params, emulator);
 

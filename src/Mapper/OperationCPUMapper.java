@@ -7,12 +7,14 @@ import java.util.Map;
 
 public class OperationCPUMapper {
     private final HashMap<String, Operations> operations = new HashMap<>(Map.of(
-            "00", Operations.LOAD,
-            "01", Operations.STORE,
+            "00", Operations.LD,
+            "01", Operations.STR,
             "02", Operations.ADD,
-            "03", Operations.JUMP,
-            "04", Operations.COMPARE,
-            "FF", Operations.HALT
+            "03", Operations.JMP,
+            "04", Operations.JZ,
+            "05", Operations.CMP,
+            "06", Operations.INC,
+            "3F", Operations.HLT
     ));
 
     public Operations toOperation(String code) {

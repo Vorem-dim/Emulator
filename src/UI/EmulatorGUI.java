@@ -159,7 +159,7 @@ public class EmulatorGUI {
         statusArea = new JTextArea("Эмулятор готов к работе", 5, 30);
         statusArea.setEditable(false);
 
-        zeroFlag = new JCheckBox("Zero", true);
+        zeroFlag = new JCheckBox("Zero", false);
         zeroFlag.setEnabled(false);
 
         signFlag = new JCheckBox("Sign", false);
@@ -285,7 +285,7 @@ public class EmulatorGUI {
 
         statusArea.setText("Эмулятор готов к работе");
 
-        zeroFlag.setSelected(true);
+        zeroFlag.setSelected(false);
         signFlag.setSelected(false);
         carryFlag.setSelected(false);
 
